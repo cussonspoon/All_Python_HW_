@@ -4,13 +4,13 @@ num = eval(input("Enter student's grade"))
 def getgrade(num):
     if num >= 80 and num <= 100:
         grade = "A"
-    elif num >= 70 and num < 80:
+    if num >= 70 and num < 80:
         grade = "B"
-    elif num >= 60 and num < 70:
+    if num >= 60 and num < 70:
         grade = "C"
-    elif num >= 50 and num < 60:
+    if num >= 50 and num < 60:
         grade = "D"
-    elif num < 50 and num >= 0:
+    if num < 50 and num >= 0:
         grade = "F"
     else :
         grade ="invalid"
@@ -91,7 +91,7 @@ def sum_of_digits(n):
     for x in str(n):
         new.append(int(x))
     result = sum(new)
-    return result, new
+    return result
 print(sum_of_digits(234))
 
 
