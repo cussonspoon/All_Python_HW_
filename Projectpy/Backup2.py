@@ -12,11 +12,13 @@ import psutil
 import pandas as pd
 import wmi
 import re
+import GPUtil
+import datetime
 
 
 
 
-
+plt.style.use('dark_background')
 #-----------------------------------------------------------------------------------------------------------------------------------
 #BASE CLASS
 class SystemDisplayBase:
@@ -35,7 +37,7 @@ class SystemDisplayBase:
 
     def set_header(self, title = ""):
         self.clear_frame()
-        Label(self.frame, text=title, font=("Tahoma", 24)).pack()
+        Label(self.frame, text=title, font=("Tahoma", 24) ,bg="Black", fg= "Green").pack()
 
     def animate(self, i):
         pass
@@ -91,10 +93,104 @@ class SystemDisplayBase:
 
 #-----------------------------------------------------------------------------------------------------------------------------------
 
+class OverallDisplay(SystemDisplayBase):
+    def __init__(self, window, frame, fig):
+        super().__init__(window, frame, "Overall Usage")
+        self.cpu_x_vals = []
+        self.cpu_y_vals = []
+
+        self.memory_x_vals = []
+        self.memory_y_vals = []
+
+        self.network_x_vals = []
+        self.network_y_vals1 = []
+        self.network_y_vals2 = []
+
+        self.disk_x_vals = []
+        self.disk_y_vals = []
+
+    def create_subplots(self):
+        # Create a single large subplot for the overall display
+        self.fig.set_size_inches(10, 5)  # Increase the figure size
+
+        # Use gridspec_kw to control the layout and spacing
+        gs = self.fig.add_gridspec(2, 2, wspace=0.3, hspace=0.3)  # Adjust spacing as needed
+
+        # Create a 2x2 grid layout within the large subplot
+        self.ax1 = self.fig.add_subplot(gs[0, 0])  # Top-left
+        self.ax2 = self.fig.add_subplot(gs[0, 1])  # Top-right
+        self.ax3 = self.fig.add_subplot(gs[1, 0])  # Bottom-left
+        self.ax4 = self.fig.add_subplot(gs[1, 1])  # Bottom-right
+
+    def animate(self, i):
+        # Update CPU graph
+        self.cpu_x_vals.append(next(self.index))
+        self.cpu_y_vals.append(psutil.cpu_percent())
+        self.ax1.clear()
+        self.ax1.plot(self.cpu_x_vals, self.cpu_y_vals, label="CPU Usage", color="red")
+
+        # Update Memory graph
+        self.memory_x_vals.append(next(self.index))
+        self.memory_y_vals.append(psutil.virtual_memory().percent)
+        self.ax2.clear()
+        self.ax2.plot(self.memory_x_vals, self.memory_y_vals, label="Memory Usage", color="blue")
+
+        # Update Network graph
+        self.network_x_vals.append(next(self.index))
+        self.network_y_vals1.append(psutil.net_io_counters().bytes_sent)
+        self.network_y_vals2.append(psutil.net_io_counters().bytes_recv)
+        self.ax3.clear()
+        self.ax3.plot(self.network_x_vals, self.network_y_vals1, label="Bytes sent", color="green")
+        self.ax3.plot(self.network_x_vals, self.network_y_vals2, label="Bytes received", color="orange")
+
+        # Update Disk graph
+        self.disk_x_vals.append(next(self.index))
+        disk_usage = psutil.disk_usage('/')
+        self.disk_y_vals.append(disk_usage.percent)
+        self.ax4.clear()
+        self.ax4.plot(self.disk_x_vals, self.disk_y_vals, label="Disk Usage", color="purple")
+
+        # Update CPU and Memory info labels
+        cpu_info = f"- CPU Name -\n\t{self.pc.Win32_Processor()[0].name}\nCurrent CPU usage = {self.cpu_y_vals[-1]}%"
+        memory_info = f"Ram Usage = {self.gigabytes_convert(psutil.virtual_memory().used)} GB / {self.gigabytes_convert(psutil.virtual_memory().total)} GB ({psutil.virtual_memory().percent}%)"
+
+        # Update network info label
+        sent = psutil.net_io_counters().bytes_sent
+        rec = psutil.net_io_counters().bytes_recv
+        network_info = f"Bytes sent = {sent} Bytes ({self.gigabytes_convert(sent)} GB)\nBytes received = {rec} Bytes ({self.gigabytes_convert(rec)} GB)"
+
+        # Update disk info label
+        disk_info = f"Disk Usage = {disk_usage.percent}%"
+
+        self.cpu_info_label.config(text=cpu_info)
+        self.memory_info_label.config(text=memory_info)
+        self.network_info_label.config(text=network_info)
+        self.disk_info_label.config(text=disk_info)
+
+    def display(self):
+        super().display()
+        self.clear_frame()
+        self.set_header("Overall Usage")
+        self.create_subplots()
+        index = itertools.count()
+        self.ani = FuncAnimation(self.fig, self.animate, frames=index, interval=1000)
+        canvas_overall = FigureCanvasTkAgg(self.fig, master=self.frame)
+        canvas_widget_overall = canvas_overall.get_tk_widget()
+        canvas_widget_overall.pack()
+        self.cpu_info_label = Label(self.frame, text="", font=("Tahoma", 18), bg="Black", fg="Green")
+        self.cpu_info_label.pack()
+        self.memory_info_label = Label(self.frame, text="", font=("Tahoma", 18), bg="Black", fg="Green")
+        self.memory_info_label.pack()
+        self.network_info_label = Label(self.frame, text="", font=("Tahoma", 18), bg="Black", fg="Green")
+        self.network_info_label.pack()
+        self.disk_info_label = Label(self.frame, text="", font=("Tahoma", 18), bg="Black", fg="Green")
+        self.disk_info_label.pack()
+
+
 class CPUDisplay(SystemDisplayBase):
     def __init__(self, window, frame):
         super().__init__(window, frame, "CPU Usage")
-        self.cpu_info_label = Label(self.frame, text="", font=("Tahoma", 18))
+        self.cpu_info_label = Label(self.frame, text="", font=("Tahoma", 18) ,bg="Black", fg= "Green")
         self.cpu_info_label.pack()
         self.cpu_x_vals = []
         self.cpu_y_vals = []
@@ -103,10 +199,10 @@ class CPUDisplay(SystemDisplayBase):
         self.cpu_x_vals.append(next(self.index))
         self.cpu_y_vals.append(psutil.cpu_percent())
         self.ax.clear()
-        self.ax.plot(self.cpu_x_vals, self.cpu_y_vals)
+        self.ax.plot(self.cpu_x_vals, self.cpu_y_vals,color= "red")
         self.ax.set_xlabel("Time (s)")
         self.ax.set_ylabel("CPU Usage (%)")
-        self.cpu_info_label.config(text=f"CPU Name = {self.pc.Win32_Processor()[0].name}\nCurrent CPU usage = {self.cpu_y_vals[-1]}%")
+        self.cpu_info_label.config(text=f"- CPU Name -\n\t{self.pc.Win32_Processor()[0].name}\nCurrent CPU usage = {self.cpu_y_vals[-1]}%")
 
     def display(self):
         self.clear_frame()
@@ -115,7 +211,7 @@ class CPUDisplay(SystemDisplayBase):
         canvas_cpu = FigureCanvasTkAgg(self.fig, master=self.frame)
         canvas_widget_cpu = canvas_cpu.get_tk_widget()
         canvas_widget_cpu.pack()
-        self.cpu_info_label = Label(self.frame, text="", font = (hasattr, 18))
+        self.cpu_info_label = Label(self.frame, text="", font = (hasattr, 18), bg="Black", fg= "Green")
         self.cpu_info_label.pack()
 
 #-----------------------------------------------------------------------------------------------------------------------------------
@@ -123,7 +219,7 @@ class CPUDisplay(SystemDisplayBase):
 class MemoryDisplay(SystemDisplayBase):
     def __init__(self, window, frame, fig):
         super().__init__(window, frame,"Memory Usage")
-        self.memory_info_label = Label(self.frame, text="", font=("Tahoma", 18))
+        self.memory_info_label = Label(self.frame, text="", font=("Tahoma", 18),bg="Black", fg= "Green")
         self.memory_info_label.pack()
         self.memory_x_vals = []
         self.memory_y_vals = []
@@ -133,7 +229,7 @@ class MemoryDisplay(SystemDisplayBase):
         self.memory_x_vals.append(next(self.index))
         self.memory_y_vals.append(psutil.virtual_memory().percent)
         self.ax.clear()
-        self.ax.plot(self.memory_x_vals, self.memory_y_vals)
+        self.ax.plot(self.memory_x_vals, self.memory_y_vals,color= "red")
         self.ax.set_xlabel("Time (s)")
         self.ax.set_ylabel("Memory Usage (%)")
         self.memory_info_label.config(text=f"GPU Name = {self.pc.Win32_VideoController()[0].name}\nRam Usage = {self.gigabytes_convert(psutil.virtual_memory().used)} GB / {self.gigabytes_convert(psutil.virtual_memory().total)} GB ({psutil.virtual_memory().percent}%)")
@@ -146,7 +242,7 @@ class MemoryDisplay(SystemDisplayBase):
         canvas_mem = FigureCanvasTkAgg(self.fig, master=self.frame)
         canvas_widget_mem = canvas_mem.get_tk_widget()
         canvas_widget_mem.pack()
-        self.memory_info_label = Label(self.frame, text="", font = (hasattr, 18) )
+        self.memory_info_label = Label(self.frame, text="", font = (hasattr, 18),bg="Black", fg= "Green" )
         self.memory_info_label.pack()
 
 #-----------------------------------------------------------------------------------------------------------------------------------
@@ -154,7 +250,7 @@ class MemoryDisplay(SystemDisplayBase):
 class NetworkDisplay(SystemDisplayBase):
     def __init__(self, window, frame, fig):
         super().__init__(window, frame,"Network")
-        self.network_info_label = Label(self.frame, text="", font=("Tahoma", 18))
+        self.network_info_label = Label(self.frame, text="", font=("Tahoma", 18),bg="Black", fg= "Green")
         self.network_info_label.pack()
         self.network_x_vals = []
         self.network_y_vals1 = []
@@ -165,8 +261,8 @@ class NetworkDisplay(SystemDisplayBase):
         self.network_y_vals1.append(psutil.net_io_counters().bytes_sent)
         self.network_y_vals2.append(psutil.net_io_counters().bytes_recv)
         self.ax.clear()
-        self.ax.plot(self.network_x_vals, self.network_y_vals1, label="Bytes sent")
-        self.ax.plot(self.network_x_vals, self.network_y_vals2, label="Bytes received")
+        self.ax.plot(self.network_x_vals, self.network_y_vals1, label="Bytes sent",color= "red")
+        self.ax.plot(self.network_x_vals, self.network_y_vals2, label="Bytes received", color = "Blue")
         self.ax.set_xlabel("Time (s)")
         self.ax.set_ylabel("Bytes counts")
         self.ax.legend(loc = "upper right")
@@ -186,7 +282,7 @@ class NetworkDisplay(SystemDisplayBase):
         canvas_network = FigureCanvasTkAgg(self.fig, master=self.frame)
         canvas_widgit_memory = canvas_network.get_tk_widget()
         canvas_widgit_memory.pack()
-        self.network_info_label = Label(self.frame, text ="", font = (hasattr, 18))
+        self.network_info_label = Label(self.frame, text ="", font = (hasattr, 18),bg="Black", fg= "Green")
         self.network_info_label.pack()
 
 #-----------------------------------------------------------------------------------------------------------------------------------
@@ -194,7 +290,7 @@ class NetworkDisplay(SystemDisplayBase):
 class DiskDisplay(SystemDisplayBase):
     def __init__(self, window, frame, fig):
         super().__init__(window, frame,"Disk Usage")
-        self.disk_info_label = Label(self.frame, text="", font=("Tahoma", 12))
+        self.disk_info_label = Label(self.frame, text="", font=("Tahoma", 12),bg="Black", fg= "Green")
         self.disk_info_label.pack()
         self.disk_x_vals = []
         self.disk_y_vals = []
@@ -220,7 +316,7 @@ class DiskDisplay(SystemDisplayBase):
 
        
         for i, name in enumerate(device_names):
-            self.ax.plot(self.disk_x_vals, self.disk_y_vals[i], label=name)
+            self.ax.plot(self.disk_x_vals, self.disk_y_vals[i], label=name,color= "Red")
 
         self.ax.legend(loc='upper left')  
 
@@ -245,7 +341,7 @@ class DiskDisplay(SystemDisplayBase):
             colalign=("center",) * len(disk_info[0].keys()),
         )
 
-        self.disk_info_label.config(text=disk_info_text, font=("Tahoma", 10))
+        self.disk_info_label.config(text=disk_info_text, font=("Tahoma", 10),bg="Black", fg= "Green")
 
     def display(self):
         super().display()
@@ -258,7 +354,7 @@ class DiskDisplay(SystemDisplayBase):
         canvas_widget_disk = canvas_disk.get_tk_widget()
         canvas_widget_disk.pack()
         
-        self.disk_info_label = Label(self.frame, text="", font=("Tahoma", 12))
+        self.disk_info_label = Label(self.frame, text="", font=("Tahoma", 12),bg="Black", fg= "Green")
         self.disk_info_label.pack()
 
 
@@ -267,7 +363,7 @@ class DiskDisplay(SystemDisplayBase):
 class ProcessDisplay(SystemDisplayBase):
     def __init__(self, window, frame):
         super().__init__(window, frame, "Process Monitor")
-        self.process_table_label = Label(self.frame, text="", font=("Tahoma", 12))
+        self.process_table_label = Label(self.frame, text="", font=("Tahoma", 12),bg="Black", fg= "Green")
         self.process_table_label.pack()
         self.process_x_vals = []
         self.process_y_vals = []
@@ -290,18 +386,18 @@ class ProcessDisplay(SystemDisplayBase):
                 selected_process_info = f"Overall memory usage : {psutil.virtual_memory().percent}%\n\nSelected Process: {selected_process_name}\n\nMemory Usage: {selected_process_memory_usage:.2f}% / {psutil.virtual_memory().percent}%"
 
                 # Create a label to display the selected process info
-                self.process_table_label.config(text=selected_process_info, font=("Tahoma", 15))
+                self.process_table_label.config(text=selected_process_info, font=("Tahoma", 15),bg="Black", fg= "Green")
                 self.process_table_label.pack()
             else:
                 # Display overall memory usage if no process is selected
                 memory_percent = psutil.virtual_memory().percent
                 self.process_y_vals.append(memory_percent)
-                self.process_table_label.config(text=f"Overall memory usage : {memory_percent}% ", font=("Tahoma", 15))
+                self.process_table_label.config(text=f"Overall memory usage : {memory_percent}% ", font=("Tahoma", 15),bg="Black", fg= "Green")
                 self.process_table_label.pack()
 
             # Update the graph
             self.ax.clear()
-            self.ax.plot(self.process_x_vals, self.process_y_vals)
+            self.ax.plot(self.process_x_vals, self.process_y_vals,color= "red")
             self.ax.set_xlabel("Time (s)")
             self.ax.set_ylabel("Memory Usage (%)")
         
@@ -315,7 +411,7 @@ class ProcessDisplay(SystemDisplayBase):
         canvas_process = FigureCanvasTkAgg(self.fig, master=self.frame)
         canvas_widget_process = canvas_process.get_tk_widget()
         canvas_widget_process.pack()
-        self.process_table_label = Label(self.frame, text="", font=("Tahoma", 12))
+        self.process_table_label = Label(self.frame, text="", font=("Tahoma", 12),bg="Black", fg= "Green")
         process_treeview = self.create_process_treeview(self.frame, self.get_top_memory_processes())
         process_treeview.bind("<Double-1>", self.on_process_row_double_click)
 
@@ -356,7 +452,7 @@ class ProcessDisplay(SystemDisplayBase):
         canvas_process = FigureCanvasTkAgg(self.fig, master=self.frame)
         canvas_widget_process = canvas_process.get_tk_widget()
         canvas_widget_process.pack()
-        self.process_table_label = Label(self.frame, text="", font=("Tahoma", 12))
+        self.process_table_label = Label(self.frame, text="", font=("Tahoma", 12),bg="Black", fg= "Green")
         self.process_table_label.pack()
 
         # Bind a double-click event to the process table to select a process
@@ -364,7 +460,7 @@ class ProcessDisplay(SystemDisplayBase):
         process_treeview.bind("<Double-1>", self.on_process_row_double_click)
 
         # Display selected process name and memory usage
-        self.process_table_label = Label(self.frame, text ="", font = (hasattr, 18))
+        self.process_table_label = Label(self.frame, text ="", font = (hasattr, 18),bg="Black", fg= "Green")
         self.process_table_label.pack()
 
     def on_process_row_double_click(self, event):
@@ -395,38 +491,21 @@ class ProcessDisplay(SystemDisplayBase):
 class TemperatureDisplay(SystemDisplayBase):
     def __init__(self, window, frame, fig):
         super().__init__(window, frame, "Temperature")
-        self.temperature_info_label = Label(self.frame, text="", font=("Tahoma", 18))
+        self.temperature_info_label = Label(self.frame, text="", font=("Tahoma", 18),bg="Black", fg= "Green")
         self.temperature_info_label.pack()
         self.temperature_x_vals = []
         self.temperature_y_vals = []
 
     def animate(self, i):
         self.temperature_x_vals.append(next(self.index))
-        try:
-            temperatures = psutil.sensors_temperatures()
-
-            if 'coretemp' in temperatures:
-                core_temp = temperatures['coretemp']
-                if core_temp:
-                    temperature = core_temp[0].current
-                    self.temperature_y_vals.append(temperature)
-                    self.ax.clear()
-                    self.ax.plot(self.temperature_x_vals, self.temperature_y_vals)
-                    self.ax.set_xlabel("Time (s)")
-                    self.ax.set_ylabel("Temperature (°C)")
-                    self.temperature_info_label.config(text=f"CPU Temperature = {temperature}°C")
-                else:
-                    self.handle_sensor_data_unavailable()
-            else:
-                self.handle_sensor_data_unavailable()
-        except Exception as e:
-            self.handle_sensor_data_unavailable()
-
-    def handle_sensor_data_unavailable(self):
+        gpu = GPUtil.getGPUs()[0]
+        temp = gpu.temperature
+        self.temperature_y_vals.append(temp)
         self.ax.clear()
-        self.temperature_info_label.config(text="No CPU temperature data available on this platform\nNote: The program is using psutil.sensors_temperatures() \nwhich might not work on some platform like window.")
-        self.ax.axis('off')
-
+        self.ax.plot(self.temperature_x_vals, self.temperature_y_vals,color= "red")
+        self.ax.set_xlabel("Time (s)")
+        self.ax.set_ylabel("Temperature (°C)")
+        self.temperature_info_label.config(text=f"CPU Temperature = {temp}°C")
     def display(self):
         super().display()
         self.clear_frame()
@@ -436,15 +515,54 @@ class TemperatureDisplay(SystemDisplayBase):
         canvas_temp = FigureCanvasTkAgg(self.fig, master=self.frame)
         canvas_widget_temp = canvas_temp.get_tk_widget()
         canvas_widget_temp.pack()
-        self.temperature_info_label = Label(self.frame, text="", font=("Tahoma", 18))
+        self.temperature_info_label = Label(self.frame, text="", font=("Tahoma", 18),bg="Black", fg= "Green")
         self.temperature_info_label.pack()
+
+    # def animate(self, i):
+    #     self.temperature_x_vals.append(next(self.index))
+    #     try:
+    #         temperatures = psutil.sensors_temperatures()
+
+    #         if 'coretemp' in temperatures:
+    #             core_temp = temperatures['coretemp']
+    #             if core_temp:
+    #                 temperature = core_temp[0].current
+    #                 self.temperature_y_vals.append(temperature)
+    #                 self.ax.clear()
+    #                 self.ax.plot(self.temperature_x_vals, self.temperature_y_vals,color= "red")
+    #                 self.ax.set_xlabel("Time (s)")
+    #                 self.ax.set_ylabel("Temperature (°C)")
+    #                 self.temperature_info_label.config(text=f"CPU Temperature = {temperature}°C")
+    #             else:
+    #                 self.handle_sensor_data_unavailable()
+    #         else:
+    #             self.handle_sensor_data_unavailable()
+    #     except Exception as e:
+    #         self.handle_sensor_data_unavailable()
+
+    # def handle_sensor_data_unavailable(self):
+    #     self.ax.clear()
+    #     self.temperature_info_label.config(text="No CPU temperature data available on this platform\nNote: The program is using psutil.sensors_temperatures() \nwhich might not work on some platform like window.")
+    #     self.ax.axis('off')
+
+    # def display(self):
+    #     super().display()
+    #     self.clear_frame()
+    #     self.set_header("Temperature")
+    #     index = itertools.count()
+    #     self.ani = FuncAnimation(self.fig, self.animate, frames=index, interval=1000)
+    #     canvas_temp = FigureCanvasTkAgg(self.fig, master=self.frame)
+    #     canvas_widget_temp = canvas_temp.get_tk_widget()
+    #     canvas_widget_temp.pack()
+    #     self.temperature_info_label = Label(self.frame, text="", font=("Tahoma", 18),bg="Black", fg= "Green")
+    #     self.temperature_info_label.pack()
 
 
 #-----------------------------------------------------------------------------------------------------------------------------------
 class BatteryDisplay(SystemDisplayBase):
     def __init__(self, window, frame, fig):
         super().__init__(window, frame, "Battery Status")
-        self.battery_info_label = Label(self.frame, text="", font=("Tahoma", 18))
+        self.battery_info_label = Label(self.frame, text="", font=("Tahoma", 18),bg="Black", fg= "Green")
         self.battery_info_label.pack()
         self.battery_x_vals = []
         self.battery_y_vals = []
@@ -452,33 +570,37 @@ class BatteryDisplay(SystemDisplayBase):
     def animate(self, i):
         self.battery_x_vals.append(next(self.index))
         battery = psutil.sensors_battery()
-        if battery:
-            battery_percent = battery.percent
-            self.battery_y_vals.append(battery_percent)
-            self.ax.clear()
-            self.ax.plot(self.battery_x_vals, self.battery_y_vals)
-            self.ax.set_xlabel("Time (s)")
-            self.ax.set_ylabel("Battery Status (%)")
-            self.battery_info_label.config(text=f"Battery Status = {battery_percent}%")
-        else:
-            self.handle_battery_data_unavailable()
-
-    def handle_battery_data_unavailable(self):
+        battery_percent = battery.percent
+        battery_left = battery.secsleft
+        self.battery_y_vals.append(battery_percent)
         self.ax.clear()
-        self.battery_info_label.config(text="No Battery data available on this platform\nNote: The program is using psutil.sensors_temperatures() \nwhich might not work on some platform like window.")
-        self.ax.axis('off')
+        self.ax.plot(self.battery_x_vals, self.battery_y_vals,color= "red")
+        self.ax.set_xlabel("Time (s)")
+        self.ax.set_ylabel("Battery Status (%)")
+        self.battery_info_label.config(text=f"Battery Status : {battery_percent}%\n Estimated time left : {self.convert_to_hour(battery_left)}\nPlugged status : {battery.power_plugged}")
+
+    def convert_to_hour(self, sec):
+        # Check if sec is not None and is a positive number
+        if sec is not None and sec > 0:
+            # Create a timedelta object with the given seconds
+            time_delta = datetime.timedelta(seconds=sec)
+            # Extract hours and minutes from the timedelta
+            hours, remainder = divmod(time_delta.seconds, 3600)
+            minutes, seconds = divmod(remainder, 60)
+            return f"{hours} hours {minutes} minutes {seconds} seconds remaining"
+        else:
+            return "N/A"
 
     def display(self):
         super().display()
         self.clear_frame()
         self.set_header("Battery Status")
-
         index = itertools.count()
         self.ani = FuncAnimation(self.fig, self.animate, frames=index, interval=1000)
         canvas_battery = FigureCanvasTkAgg(self.fig, master=self.frame)
         canvas_widget_battery = canvas_battery.get_tk_widget()
         canvas_widget_battery.pack()
-        self.battery_info_label = Label(self.frame, text="", font=("Tahoma", 18))
+        self.battery_info_label = Label(self.frame, text="", font=("Tahoma", 18),bg="Black", fg= "Green")
         self.battery_info_label.pack()
 
     
@@ -490,7 +612,7 @@ class System:
         self.window = tk.Tk()
         self.window.title("System status display")
 
-        self.frame = tk.Frame(self.window, width=1200, height=700)
+        self.frame = tk.Frame(self.window, width=1200, height=700, bg="Black")
         self.frame.pack()
 
         menubar = Menu(self.window)
@@ -500,7 +622,7 @@ class System:
         menubar.add_cascade(label="Options", menu=options_menu)
 
         self.display_types = {
-            "Overall": SystemDisplayBase(self.window, self.frame, "Overall"),
+            "Overall": OverallDisplay(self.window, self.frame, plt.subplots()),
             "CPU": CPUDisplay(self.window, self.frame),
             "Memory": MemoryDisplay(self.window, self.frame, plt.subplots()),
             "Network": NetworkDisplay(self.window, self.frame, plt.subplots()),
