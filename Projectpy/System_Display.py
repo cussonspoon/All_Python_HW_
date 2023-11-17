@@ -159,12 +159,15 @@ class OverallDisplay(SystemDisplayBase):
         self.ax[2, 0].set_title("Temperature")
 
         #Update the Battery graph
-        battery = psutil.sensors_battery()
-        battery = battery.percent
-        self.battery_y_vals.append(battery)
-        self.ax[2, 1].clear()
-        self.ax[2, 1].plot(self.x_vals, self.battery_y_vals, label= "Battery (%)", color = "green")
-        self.ax[2, 1].set_title("Battery")
+        try:
+            battery = psutil.sensors_battery()
+            battery = battery.percent
+            self.battery_y_vals.append(battery)
+            self.ax[2, 1].clear()
+            self.ax[2, 1].plot(self.x_vals, self.battery_y_vals, label= "Battery (%)", color = "green")
+            self.ax[2, 1].set_title("Battery")
+        except:
+             self.ax[2, 1].set_title("Battery (Not avaliable)")
 
 
         # Update CPU and Memory info labels
@@ -183,7 +186,15 @@ class OverallDisplay(SystemDisplayBase):
         temp_info = f"Temperature = {temp}°C"
 
         #Update Battery info label
-        batt_info = f"Battery = {battery}%"
+        try:
+            if battery == None:
+                raise ValueError
+            else:
+                batt_info = f"Battery = {battery}%"
+        except ValueError:
+            batt_info = f"Battery info not avaliable"
+
+        #Update the info of all Labels
         self.cpu_info_label.config(text=cpu_info)
         self.memory_info_label.config(text=memory_info)
         self.network_info_label.config(text=network_info)
@@ -446,7 +457,7 @@ class ProcessDisplay(SystemDisplayBase):
     def create_process_treeview(self, frame, process_data):
         # Create a frame to hold the Treeview and the scrollbar
         table_frame = tk.Frame(frame)
-        table_frame.pack(side=tk.LEFT, padx=10, pady=10)  # Adjust padding as needed
+        table_frame.pack(side=tk.LEFT, padx=10, pady=10)
 
         # Create the Treeview widget inside the table frame
         treeview = ttk.Treeview(table_frame, columns=("PID", "Name", "Status"), show="headings")
@@ -476,7 +487,7 @@ class ProcessDisplay(SystemDisplayBase):
         self.set_header("Process Monitor")
 
         index = itertools.count()
-        self.ani = FuncAnimation(self.fig, self.animate, frames=index, interval=1000)  # Update every 2 seconds
+        self.ani = FuncAnimation(self.fig, self.animate, frames=index, interval=1000)
         canvas_process = FigureCanvasTkAgg(self.fig, master=self.frame)
         canvas_widget_process = canvas_process.get_tk_widget()
         canvas_widget_process.pack()
@@ -556,23 +567,23 @@ class BatteryDisplay(SystemDisplayBase):
         self.battery_y_vals = []
 
     def animate(self, i):
-        self.battery_x_vals.append(next(self.index))
-        battery = psutil.sensors_battery()
-        battery_percent = battery.percent
-        battery_left = battery.secsleft
-        self.battery_y_vals.append(battery_percent)
-        self.ax.clear()
-        self.ax.plot(self.battery_x_vals, self.battery_y_vals,color= "red")
-        self.ax.set_xlabel("Time (s)")
-        self.ax.set_ylabel("Battery Status (%)")
-        self.battery_info_label.config(text=f"Battery Status : {battery_percent}%\n Estimated time left : {self.convert_to_hour(battery_left)}\nPlugged status : {battery.power_plugged}")
+        try:
+            self.battery_x_vals.append(next(self.index))
+            battery = psutil.sensors_battery()
+            battery_percent = battery.percent
+            battery_left = battery.secsleft
+            self.battery_y_vals.append(battery_percent)
+            self.ax.clear()
+            self.ax.plot(self.battery_x_vals, self.battery_y_vals,color= "red")
+            self.ax.set_xlabel("Time (s)")
+            self.ax.set_ylabel("Battery Status (%)")
+            self.battery_info_label.config(text=f"Battery Status : {battery_percent}%\n Estimated time left : {self.convert_to_hour(battery_left)}\nPlugged status : {battery.power_plugged}")
+        except:
+            self.battery_info_label.config(text = "Battery info is not avaliable")
 
     def convert_to_hour(self, sec):
-        # Check if sec is not None and is a positive number
         if sec is not None and sec > 0:
-            # Create a timedelta object with the given seconds
             time_delta = datetime.timedelta(seconds=sec)
-            # Extract hours and minutes from the timedelta
             hours, remainder = divmod(time_delta.seconds, 3600)
             minutes, seconds = divmod(remainder, 60)
             return f"{hours} hours {minutes} minutes {seconds} seconds remaining"
@@ -623,26 +634,29 @@ class Notification(SystemDisplayBase):
         if self.monitoring_started:
             cpu_percent = psutil.cpu_percent()
             memory_percent = psutil.virtual_memory().percent
+            gpu = GPUtil.getGPUs()[0]
+            temperatures = gpu.temperature
             msg = ""
-
             try:
-                gpu = GPUtil.getGPUs()[0]
-                temperatures = gpu.temperature
                 battery = psutil.sensors_battery()
                 battery = battery.percent
-            except:
-                temperatures = None
+            except:  
                 battery = None
 
             if cpu_percent > float(self.cpu_thold.get()):
                 msg += f"CPU usage exceeds the threshold: {cpu_percent}%\n"
+            elif cpu_percent == float(self.cpu_thold.get()):
+                msg += f"CPU usage is at the threshold: {cpu_percent}%\n"
 
             if memory_percent > float(self.mem_thold.get()):
                 msg += f"Memory usage exceeds the threshold: {memory_percent}%\n"
-
+            elif memory_percent == float(self.mem_thold.get()):
+                msg += f"Memory usage is at the threshold: {memory_percent}%\n"
             if temperatures is not None:
                 if temperatures > float(self.temp_thold.get()):
                     msg += f"Core temperature exceeds the threshold: {temperatures}°C\n"
+                elif temperatures == float(self.temp_thold.get()):
+                    msg += f"Core temperature is at the threshold: {temperatures}°C\n"
             else:
                 msg += "Temperature data not available\n"
 
