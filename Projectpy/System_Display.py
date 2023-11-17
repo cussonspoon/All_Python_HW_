@@ -12,6 +12,8 @@ import psutil
 import pandas as pd
 import wmi
 import re
+import winotify
+import time
 
 
 
@@ -94,59 +96,46 @@ class SystemDisplayBase:
 class OverallDisplay(SystemDisplayBase):
     def __init__(self, window, frame, fig):
         super().__init__(window, frame, "Overall Usage")
-        self.cpu_x_vals = []
+        self.x_vals = []
         self.cpu_y_vals = []
 
-        self.memory_x_vals = []
         self.memory_y_vals = []
 
-        self.network_x_vals = []
         self.network_y_vals1 = []
         self.network_y_vals2 = []
 
-        self.disk_x_vals = []
         self.disk_y_vals = []
 
     def create_subplots(self):
-        # Create a single large subplot for the overall display
-        self.fig.set_size_inches(10, 5)  # Increase the figure size
-
-        # Use gridspec_kw to control the layout and spacing
-        gs = self.fig.add_gridspec(2, 2, wspace=0.3, hspace=0.3)  # Adjust spacing as needed
-
-        # Create a 2x2 grid layout within the large subplot
-        self.ax1 = self.fig.add_subplot(gs[0, 0])  # Top-left
-        self.ax2 = self.fig.add_subplot(gs[0, 1])  # Top-right
-        self.ax3 = self.fig.add_subplot(gs[1, 0])  # Bottom-left
-        self.ax4 = self.fig.add_subplot(gs[1, 1])  # Bottom-right
-
+        self.fig , self.ax = plt.subplots(2, 2)
+        self.ax[0, 0].title.set_text("CPU")
+        self.ax[0, 1].title.set_text("Memory")
+        self.ax[1, 0].title.set_text("Network")
+        self.ax[1, 1].title.set_text("Disk")
     def animate(self, i):
         # Update CPU graph
-        self.cpu_x_vals.append(next(self.index))
+        self.x_vals.append(next(self.index))
         self.cpu_y_vals.append(psutil.cpu_percent())
-        self.ax1.clear()
-        self.ax1.plot(self.cpu_x_vals, self.cpu_y_vals, label="CPU Usage", color="red")
+        self.ax[0, 0].clear()
+        self.ax[0, 0].plot(self.x_vals, self.cpu_y_vals, label="CPU Usage", color="red")
 
         # Update Memory graph
-        self.memory_x_vals.append(next(self.index))
         self.memory_y_vals.append(psutil.virtual_memory().percent)
-        self.ax2.clear()
-        self.ax2.plot(self.memory_x_vals, self.memory_y_vals, label="Memory Usage", color="blue")
+        self.ax[0, 1].clear()
+        self.ax[0, 1].plot(self.x_vals, self.memory_y_vals, label="Memory Usage", color="blue")
 
         # Update Network graph
-        self.network_x_vals.append(next(self.index))
         self.network_y_vals1.append(psutil.net_io_counters().bytes_sent)
         self.network_y_vals2.append(psutil.net_io_counters().bytes_recv)
-        self.ax3.clear()
-        self.ax3.plot(self.network_x_vals, self.network_y_vals1, label="Bytes sent", color="green")
-        self.ax3.plot(self.network_x_vals, self.network_y_vals2, label="Bytes received", color="orange")
+        self.ax[1, 0].clear()
+        self.ax[1, 0].plot(self.x_vals, self.network_y_vals1, label="Bytes sent", color="green")
+        self.ax[1, 0].plot(self.x_vals, self.network_y_vals2, label="Bytes received", color="orange")
 
         # Update Disk graph
-        self.disk_x_vals.append(next(self.index))
         disk_usage = psutil.disk_usage('/')
         self.disk_y_vals.append(disk_usage.percent)
-        self.ax4.clear()
-        self.ax4.plot(self.disk_x_vals, self.disk_y_vals, label="Disk Usage", color="purple")
+        self.ax[1, 1].clear()
+        self.ax[1, 1].plot(self.x_vals, self.disk_y_vals, label="Disk Usage", color="purple")
 
         # Update CPU and Memory info labels
         cpu_info = f"- CPU Name -\n\t{self.pc.Win32_Processor()[0].name}\nCurrent CPU usage = {self.cpu_y_vals[-1]}%"
@@ -577,6 +566,128 @@ class BatteryDisplay(SystemDisplayBase):
 
     
 #-----------------------------------------------------------------------------------------------------------------------------------
+class Notification(SystemDisplayBase):
+    def __init__(self, window, frame):
+        super().__init__(window, frame, "Notification")
+        self.monitoring_started = False
+        self.after_id = None
+
+    def start_monitoring(self):
+        if not self.monitoring_started:
+            self.monitoring_started = True
+            self.monitor_system()
+
+    def stop_monitoring(self):
+        self.monitoring_started = False
+        if self.after_id:
+            self.frame.after_cancel(self.after_id)
+
+    def check_value(self, value, label):
+        try:
+            value = float(value)
+            label.config(text=f"Threshold set to {value}")
+        except ValueError:
+            label.config(text="Invalid input. Please enter valid numeric values.")
+    def shownoti(self, mssg):
+        noti = winotify.Notification(app_id = "System Display", title = "Threshold exceed", msg = mssg, duration  = "long")
+        noti.show()
+    def monitor_system(self):
+        if self.monitoring_started:
+            cpu_percent = psutil.cpu_percent()
+            memory_percent = psutil.virtual_memory().percent
+            msg = ""
+
+            try:
+                temperatures = psutil.sensors_temperatures()
+                battery = psutil.sensors_battery()
+            except:
+                temperatures = None
+                battery = None
+
+            if cpu_percent > float(self.cpu_thold.get()):
+                msg += f"CPU usage exceeds the threshold: {cpu_percent}%\n"
+
+            if memory_percent > float(self.mem_thold.get()):
+                msg += f"Memory usage exceeds the threshold: {memory_percent}%\n"
+
+            if temperatures is not None and 'coretemp' in temperatures:
+                core_temp = temperatures['coretemp'][0].current
+                if core_temp > float(self.temp_thold.get()):
+                    msg += f"Core temperature exceeds the threshold: {core_temp}°C\n"
+            else:
+                msg += "Temperature data not available\n"
+
+            if battery is not None and isinstance(battery, psutil.Battery):
+                battery_percent = battery.percent
+                if battery_percent < float(self.batt_thold.get()):
+                    msg += f"Battery level is low: {battery_percent}%\n"
+            else:
+                msg += "Battery data not available\n"
+
+            if msg:
+                self.shownoti(msg)
+
+            self.after_id = self.frame.after(10000, self.monitor_system)
+                
+            
+    def display(self):
+        super().display()
+        self.clear_frame()
+
+        self.cpu_thold = tk.StringVar()
+        self.mem_thold = tk.StringVar()
+        self.temp_thold = tk.StringVar()
+        self.batt_thold = tk.StringVar()
+
+        self.title = tk.Label(self.frame, text="Threshold for notification", font=("Arial", 20), justify="center")
+        self.cpu_label = tk.Label(self.frame, text="CPU", font=("Arial", 12), justify='center', bg='white')
+        self.cpu_label2 = tk.Label(self.frame)
+        self.cpu_entry = tk.Entry(self.frame, width=20, textvariable=self.cpu_thold, font=('Arial', 12), justify='center', bg='white')
+        self.confirm_button_cpu = tk.Button(self.frame, width=20, text="Confirm", font=("Arial", 12), justify="center", bg="white", command=lambda: self.check_value(self.cpu_thold.get(), self.cpu_label2))
+        self.mem_label = tk.Label(self.frame, text="Memory", font=("Arial", 12), justify='center', bg='white')
+        self.mem_label2 = tk.Label(self.frame)
+        self.mem_entry = tk.Entry(self.frame, width=20, textvariable=self.mem_thold, font=('Arial', 12), justify='center', bg='white')
+        self.confirm_button_mem = tk.Button(self.frame, width=20, text="Confirm", font=("Arial", 12), justify="center", bg="white", command=lambda: self.check_value(self.mem_thold.get(), self.mem_label2))
+        self.temp_label = tk.Label(self.frame, text="Temperature", font=("Arial", 12), justify='center', bg='white')
+        self.temp_label2 = tk.Label(self.frame)
+        self.temp_entry = tk.Entry(self.frame, width=20, textvariable=self.temp_thold, font=('Arial', 12), justify='center', bg='white')
+        self.confirm_button_temp = tk.Button(self.frame, width=20, text="Confirm", font=("Arial", 12), justify="center", bg="white", command=lambda: self.check_value(self.temp_thold.get(), self.temp_label2))
+        self.batt_label = tk.Label(self.frame, text="Battery", font=("Arial", 12), justify='center', bg='white')
+        self.batt_label2 = tk.Label(self.frame)
+        self.batt_entry = tk.Entry(self.frame, width=20, textvariable=self.batt_thold, font=('Arial', 12), justify='center', bg='white')
+        self.confirm_button_batt = tk.Button(self.frame, width=20, text="Confirm", font=("Arial", 12), justify="center", bg="white", command=lambda: self.check_value(self.batt_thold.get(), self.batt_label2))
+
+        # Pack the widgets
+        self.title.pack()
+        self.cpu_label.pack()
+        self.cpu_entry.pack()
+        self.confirm_button_cpu.pack()
+        self.cpu_label2.pack()
+        self.mem_label.pack()
+        self.mem_entry.pack()
+        self.confirm_button_mem.pack()
+        self.mem_label2.pack()
+        self.temp_label.pack()
+        self.temp_entry.pack()
+        self.confirm_button_temp.pack()
+        self.temp_label2.pack()
+        self.batt_label.pack()
+        self.batt_entry.pack()
+        self.confirm_button_batt.pack()
+        self.batt_label2.pack()
+        self.start_button = tk.Button(self.frame, width=20, text="Start Monitoring", font=("Arial", 12), justify="center", bg="white", command=self.start_monitoring)
+        self.start_button.pack()
+        self.stop_button = tk.Button(self.frame, width=20, text="Stop Monitoring", font=("Arial", 12), justify="center", bg="white", command=self.stop_monitoring)
+        self.stop_button.pack()
+
+
+
+        
+   
+        
+
+        
+#-----------------------------------------------------------------------------------------------------------------------------------
 
 
 class System:
@@ -601,7 +712,8 @@ class System:
             "Disk": DiskDisplay(self.window, self.frame, plt.subplots()),
             "Process": ProcessDisplay(self.window, self.frame),
             "Temperature" : TemperatureDisplay(self.window, self.frame, plt.subplot()),
-            "Battery" : BatteryDisplay(self.window, self.frame, plt.subplot()), 
+            "Battery" : BatteryDisplay(self.window, self.frame, plt.subplot()),
+            "Notification" : Notification(self.window, self.frame)
         }
 
         for label, display in self.display_types.items():
