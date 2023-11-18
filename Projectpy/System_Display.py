@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import Menu, Label, Canvas, Scrollbar, ttk
+import abc
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
@@ -23,7 +24,7 @@ import time
 plt.style.use('dark_background')
 #-----------------------------------------------------------------------------------------------------------------------------------
 #BASE CLASS
-class SystemDisplayBase:
+class SystemDisplayBase(abc.ABC):
     def __init__(self, window, frame, title):
         self.window = window
         self.frame = frame
@@ -41,11 +42,14 @@ class SystemDisplayBase:
         self.clear_frame()
         Label(self.frame, text=title, font=("Tahoma", 24) ,bg="Black", fg= "Green").pack()
 
+    @abc.abstractmethod
     def animate(self, i):
         pass
-
+    
+    @abc.abstractmethod
     def display(self):
         pass
+    
 
     def gigabytes_convert(self, byte):
         one_gb = 1073741824
@@ -606,6 +610,8 @@ class BatteryDisplay(SystemDisplayBase):
     
 #-----------------------------------------------------------------------------------------------------------------------------------
 class Notification(SystemDisplayBase):
+    def animate(self, i):
+        pass
     def __init__(self, window, frame):
         super().__init__(window, frame, "Notification")
         self.monitoring_started = False
